@@ -1,0 +1,113 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+:root {
+  --background: #FAF8F5;
+  --foreground: #000000;
+}
+
+.dark-mode {
+  --background: #0f172a; /* Deep slate navy */
+  --foreground: #f8fafc;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Polished Slate Dark Mode Overrides */
+html.dark-mode .bg-white {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+/* Convert bright pastel accent cards to readable dark tones in dark mode */
+html.dark-mode .bg-\[\#A7F3D0\] {
+  background-color: #064e3b !important; /* Dark emerald */
+  color: #ecfdf5 !important;
+}
+
+html.dark-mode .bg-\[\#BFDBFE\] {
+  background-color: #1e3a8a !important; /* Dark blue */
+  color: #eff6ff !important;
+}
+
+html.dark-mode .bg-\[\#FF8A65\] {
+  background-color: #7c2d12 !important; /* Dark amber/orange */
+  color: #ffedd5 !important;
+}
+
+html.dark-mode input,
+html.dark-mode select {
+  background-color: #334155 !important;
+  color: #f8fafc !important;
+  border-color: #64748b !important;
+}
+
+html.dark-mode .text-gray-800,
+html.dark-mode .text-gray-700,
+html.dark-mode .text-gray-600 {
+  color: #94a3b8 !important;
+}
+
+html.dark-mode .border-black {
+  border-color: #475569 !important;
+}
+
+html.dark-mode [class*="shadow-["] {
+  box-shadow: 6px 6px 0px 0px rgba(100, 116, 139, 1) !important;
+}
+
+@layer utilities {
+  /* Custom styled scrollbars for sidebar and containers */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #FAF8F5;
+    border-left: 2px solid #000;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #000;
+    border-radius: 4px;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+  background-color: #FAF8F5;
+}
+
+::selection {
+  background-color: #BFDBFE;
+  color: #000;
+}
+
+/* Custom styled scrollbars matching the thick black border aesthetic */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #FAF8F5;
+  border-left: 2px solid #000;
+}
+::-webkit-scrollbar-thumb {
+  background: #000;
+  border-radius: 4px;
+}
