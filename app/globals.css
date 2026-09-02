@@ -111,3 +111,12 @@ html {
   background: #000;
   border-radius: 4px;
 }
+
+@layer utilities {
+  .prose table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+}
