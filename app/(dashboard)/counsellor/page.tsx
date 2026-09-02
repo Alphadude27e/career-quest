@@ -104,7 +104,6 @@ function CounsellorChatContent() {
 
   const toggleListening = () => {
     if (!recognitionRef.current) {
-      // Fallback: If browser speech blocks due to network errors, focus the input so the user can type seamlessly
       inputRef.current?.focus();
       setError("Voice dictation unavailable in this browser environment. You can type directly below!");
       setTimeout(() => setError(null), 4000);
@@ -456,7 +455,7 @@ function CounsellorChatContent() {
       initial={{ opacity: 0, y: 20 }} 
       animate={{ opacity: 1, y: 0 }} 
       transition={{ duration: 0.4 }}
-      className="flex h-[calc(100vh-6rem)] bg-white border-4 border-black rounded-3xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden relative z-10"
+      className="flex h-[calc(100vh-6rem)] max-w-full bg-white border-4 border-black rounded-3xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden relative z-10 box-border"
     >
       
       {/* 🌟 ANIMATED Sessions Sidebar */}
@@ -464,7 +463,7 @@ function CounsellorChatContent() {
         initial={{ x: -100, opacity: 0 }} 
         animate={{ x: 0, opacity: 1 }} 
         transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.1 }}
-        className="w-72 border-r-4 border-black p-4 flex flex-col bg-[#FAF8F5] hidden sm:flex z-10"
+        className="w-72 border-r-4 border-black p-4 flex flex-col bg-[#FAF8F5] hidden sm:flex z-10 shrink-0"
       >
         <motion.button
           whileHover={{ scale: 1.02, translateY: -2 }}
@@ -510,24 +509,24 @@ function CounsellorChatContent() {
       </motion.div>
 
       {/* Main Conversation Stream */}
-      <div className="flex-1 flex flex-col h-full bg-[#FAF8F5] relative">
+      <div className="flex-1 flex flex-col h-full bg-[#FAF8F5] relative min-w-0 overflow-hidden">
         
         {/* 🌟 ANIMATED Header */}
         <motion.div 
           initial={{ y: -50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.2 }}
-          className="px-6 py-4 border-b-4 border-black flex items-center justify-between bg-white shrink-0"
+          className="px-4 sm:px-6 py-4 border-b-4 border-black flex flex-wrap items-center justify-between bg-white shrink-0 gap-2"
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full border-4 border-black bg-[#A7F3D0] flex items-center justify-center text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-full border-4 border-black bg-[#A7F3D0] flex items-center justify-center text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shrink-0">
               <Bot className="w-6 h-6" />
             </div>
-            <div>
-              <h2 className="text-lg font-black uppercase">Academic Guide AI</h2>
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-black uppercase truncate">AI Counsellor</h2>
             </div>
           </div>
-          <span className="inline-flex items-center gap-2 text-[10px] sm:text-xs font-black text-black bg-[#BFDBFE] border-2 border-black px-3 py-1 rounded-full shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+          <span className="inline-flex items-center gap-2 text-[10px] sm:text-xs font-black text-black bg-[#BFDBFE] border-2 border-black px-3 py-1 rounded-full shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shrink-0">
             Voice & Memory Active
           </span>
         </motion.div>
@@ -539,7 +538,7 @@ function CounsellorChatContent() {
         )}
 
         {/* Chat Messages */}
-        <div ref={listRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+        <div ref={listRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 min-w-0">
           {messages.length === 0 && !loading && (
             <motion.div 
               initial={{ scale: 0.8, opacity: 0 }}
@@ -562,10 +561,10 @@ function CounsellorChatContent() {
                 initial={{ opacity: 0, y: 20, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 transition={{ type: "spring", stiffness: 250, damping: 20 }}
-                className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`flex w-full min-w-0 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`border-4 border-black p-4 sm:p-5 max-w-2xl shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] relative ${
+                  className={`border-4 border-black p-4 sm:p-5 max-w-[85%] sm:max-w-2xl break-words shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] relative ${
                     m.role === 'user'
                       ? 'bg-[#BFDBFE] rounded-3xl rounded-tr-none'
                       : 'bg-white rounded-3xl rounded-tl-none'
@@ -652,7 +651,7 @@ function CounsellorChatContent() {
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder={isListening ? "Listening to your voice..." : "Type your query or click the mic to speak..."}
-              className={`flex-1 bg-[#FAF8F5] border-4 border-black rounded-2xl px-4 py-3 sm:py-4 font-bold text-sm sm:text-base focus:outline-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-black transition-colors ${
+              className={`flex-1 min-w-0 bg-[#FAF8F5] border-4 border-black rounded-2xl px-4 py-3 sm:py-4 font-bold text-sm sm:text-base focus:outline-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-black transition-colors ${
                 isListening ? 'border-red-400 placeholder:text-red-500' : ''
               }`}
             />
