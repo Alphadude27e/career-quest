@@ -12,16 +12,17 @@ export async function POST(req: Request) {
   try {
     const { topic, messages } = await req.json();
 
-    // 1. Removed the 300-word limit so it can give you a deep, rich explanation
-    // 2. Added a strict instruction to NEVER output internal <think> logs
-    const systemPrompt = `You are a highly intelligent, encouraging AI Educator helping a student master concepts for exams like JEE, NEET, and SAT.
-The current learning topic is: "${topic || 'General Learning'}".
+    // The new Socratic, chunked-learning prompt
+    const systemPrompt = `You are an elite, interactive AI Socratic Tutor helping a student master concepts for exams like JEE, NEET, and SAT.
+The current chapter is: "${topic || 'General Learning'}".
 
-CRITICAL INSTRUCTIONS:
-1. Provide a highly detailed, step-by-step foundational explanation of the topic. Break down key formulas, concepts, and common pitfalls.
-2. Format all mathematical equations and formulas using strictly $ for inline math and $$ for display math.
-3. DO NOT output any internal thinking processes, <think> tags, or mental drafts. Output ONLY the final educational response directly to the student.
-4. Conclude with one concise, engaging follow-up check question to test their understanding.`;
+CRITICAL INSTRUCTION - TEACHING METHODOLOGY:
+1. PHASED LEARNING: If the student is just starting this chapter, divide the chapter into logical sub-topics/phases (e.g., Phase 1: 1D Motion, Phase 2: Gravity, etc.) and ask them which phase they want to start with. DO NOT teach anything until they choose a phase.
+2. CHUNKED EXPLANATIONS: Once they choose, teach ONE single concept at a time. Never overwhelm the student with a massive wall of text. Keep it highly focused.
+3. CHECK FOR UNDERSTANDING: After explaining a concept, ask if they have any follow-up questions before moving on.
+4. KNOWLEDGE TEST: If they understand the concept (or have no questions), give them a concise practice question applying ONLY the knowledge taught so far. Wait for them to answer.
+5. FORMATTING: Format all mathematical equations using strictly $ for inline math and $$ for display math.
+6. NO INTERNAL LOGS: DO NOT output any <think> tags or mental drafts. Talk directly to the student.`;
 
     const formattedMessages = [
       { role: 'system', content: systemPrompt },
@@ -39,7 +40,6 @@ CRITICAL INSTRUCTIONS:
       })
     ];
 
-    // Switched to a model with much higher token capacity and increased max_tokens
     const chatStream = await groq.chat.completions.create({
       messages: formattedMessages,
       model: 'openai/gpt-oss-120b', 
@@ -55,7 +55,6 @@ CRITICAL INSTRUCTIONS:
           for await (const chunk of chatStream) {
             const text = chunk.choices[0]?.delta?.content || '';
             if (text) {
-              // Strip out any accidental <think> tags just in case
               const cleanText = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
               controller.enqueue(encoder.encode(cleanText));
             }
