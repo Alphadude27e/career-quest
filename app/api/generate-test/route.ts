@@ -7,36 +7,80 @@ const groq = new Groq({
 
 export async function POST(req: Request) {
   try {
-    const { topic, count = 3 } = await req.json();
+    const { topic, count } = await req.json();
+    const questionCount = count || 5;
 
-    const prompt = `You are an expert academic test generator. Generate a multiple-choice test on the topic: "${topic}" containing exactly ${count} questions.
-IMPORTANT: Do NOT use LaTeX formatting, backslashes, or math tags like \\( or \\mathbf. Use clean plain text for all formulas and variables.
-You MUST return ONLY a valid JSON array matching this exact structure, with no extra markdown blocks or text outside the JSON:
-[
-  {
-    "id": 1,
-    "question": "Question text here",
-    "options": ["Option A", "Option B", "Option C", "Option D"],
-    "correctAnswer": 0,
-    "explanation": "Deeply explained reason why the correct answer is right and others are wrong."
-  }
-]
-where "correctAnswer" is the zero-based index of the correct option (0 for first, 1 for second, etc.).`;
+    // CHAIN OF THOUGHT PROMPT: Explanation MUST come before the answer
+    const prompt = `You are an expert academic examiner. Create a ${questionCount}-question multiple-choice quiz on the topic: "${topic}".
+
+STRICT RULES TO PREVENT FACTUAL ERRORS:
+1. You must think step-by-step. Write a detailed, factually accurate "explanation" FIRST.
+2. Based on your explanation, provide 4 distinct "options".
+3. In "correctAnswer", write the EXACT string matching the correct option verbatim. Do not use letters or indices.
+
+Return ONLY a valid JSON object matching this schema with no extra text or markdown:
+{
+  "questions": [
+    {
+      "question": "Question text here?",
+      "explanation": "Step-by-step factual reasoning explaining the correct concept.",
+      "options": [
+        "First option",
+        "Second option",
+        "Third option",
+        "Fourth option"
+      ],
+      "correctAnswer": "Exact text of the correct option"
+    }
+  ]
+}`;
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
-      model: 'openai/gpt-oss-120b',
-      temperature: 0.5,
-      max_tokens: 8192,
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.1, // Keep this very low for factual accuracy
+      max_tokens: 2500,
     });
 
-    const rawContent = chatCompletion.choices[0]?.message?.content || '[]';
-    const cleanJSON = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
-    const questions = JSON.parse(cleanJSON);
+    const rawContent = chatCompletion.choices[0]?.message?.content || '{}';
 
-    return NextResponse.json({ questions });
+    // Strip out markdown formatting that Groq sometimes adds
+    const cleanJSON = rawContent
+      .replace(/```json/gi, '')
+      .replace(/```/gi, '')
+      .trim();
+
+    const parsedData = JSON.parse(cleanJSON);
+
+    // Sanitize the output for the frontend
+    const sanitizedQuestions = (parsedData.questions || []).map((q: any) => {
+      let correctIndex = q.options.findIndex(
+        (opt: string) => opt.trim().toLowerCase() === String(q.correctAnswer || '').trim().toLowerCase()
+      );
+
+      if (correctIndex === -1) {
+        correctIndex = q.options.findIndex((opt: string) =>
+          opt.toLowerCase().includes(String(q.correctAnswer || '').toLowerCase())
+        );
+      }
+
+      const finalIndex = correctIndex >= 0 ? correctIndex : 0;
+
+      return {
+        question: q.question,
+        options: q.options,
+        correctAnswer: q.options[finalIndex], // Ensure the exact string is passed
+        correctAnswerIndex: finalIndex,
+        explanation: q.explanation || '',
+      };
+    });
+
+    return NextResponse.json({ questions: sanitizedQuestions });
   } catch (error: any) {
     console.error('Test generation error:', error);
-    return NextResponse.json({ error: 'Failed to generate test' }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message || 'Failed to generate test' },
+      { status: 500 }
+    );
   }
 }
