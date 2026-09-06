@@ -6,17 +6,16 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { CheckCircle, Play, Sparkles, Plus, RefreshCw, Clock, XCircle, Trash2, Bot, History, Eye, Send } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
-// Imports for rendering Markdown and Math equations beautifully
+// Imports for rendering Markdown and Math equations
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 
-// 🌟 IMPORT FRAMER MOTION
+// Framer Motion Animations
 import { motion, AnimatePresence, Variants } from 'framer-motion';
 
-// Type for our inline chat feature
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -120,7 +119,7 @@ function StudyHubContent() {
   };
 
   const handleDeleteTest = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
+    e.stopPropagation(); 
     const updated = tests.filter((t) => t.id !== id);
     setTests(updated);
     try { await saveToFirestore(modules, updated, testHistory); } catch (error) {}
@@ -165,24 +164,49 @@ function StudyHubContent() {
     }
   };
 
-  const getCorrectAnswerText = (q: any) => {
-    if (!q) return '';
-    const raw = q.answer !== undefined ? String(q.answer) : String(q.correctAnswer);
-    if (q.options && q.options.includes(raw)) return raw; 
+  const getCorrectAnswerText = (q: any): string => {
+    if (!q || !q.options || q.options.length === 0) return '';
 
-    const asNum = parseInt(raw);
-    if (!isNaN(asNum) && q.options) {
-      if ((raw === "1" || raw === "2" || raw === "3" || raw === "4") && q.options[asNum - 1]) {
-        return q.options[asNum - 1]; 
+    // 1. Direct string match in options array
+    if (typeof q.correctAnswer === 'string' && q.correctAnswer.trim()) {
+      const match = q.options.find(
+        (opt: string) => opt.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase()
+      );
+      if (match) return match;
+    }
+
+    if (typeof q.answer === 'string' && q.answer.trim()) {
+      const match = q.options.find(
+        (opt: string) => opt.trim().toLowerCase() === q.answer.trim().toLowerCase()
+      );
+      if (match) return match;
+    }
+
+    // 2. 0-based integer index
+    if (typeof q.correctAnswerIndex === 'number' && q.options[q.correctAnswerIndex] !== undefined) {
+      return q.options[q.correctAnswerIndex];
+    }
+
+    // 3. String numeric index or Letter (A, B, C, D)
+    const rawVal = q.correctAnswer !== undefined ? q.correctAnswer : q.answer;
+    if (rawVal !== undefined && rawVal !== null) {
+      const strVal = String(rawVal).trim().toLowerCase();
+      
+      if (['a', 'b', 'c', 'd'].includes(strVal)) {
+        const idx = strVal.charCodeAt(0) - 97;
+        if (q.options[idx] !== undefined) return q.options[idx];
       }
-      if (q.options[asNum]) return q.options[asNum]; 
+
+      const numVal = parseInt(strVal, 10);
+      if (!isNaN(numVal)) {
+        if (q.options[numVal] !== undefined) return q.options[numVal];
+        if (numVal >= 1 && numVal <= q.options.length && q.options[numVal - 1] !== undefined) {
+          return q.options[numVal - 1];
+        }
+      }
     }
-    
-    if (raw && ['a', 'b', 'c', 'd'].includes(raw.toLowerCase()) && q.options) {
-      const idx = raw.toLowerCase().charCodeAt(0) - 97;
-      if (q.options[idx]) return q.options[idx];
-    }
-    return raw;
+
+    return q.options[0] || '';
   };
 
   const closeTestModal = () => {
@@ -207,10 +231,9 @@ function StudyHubContent() {
     const q = activeTest.questions[currentQ];
     const correctAnsText = getCorrectAnswerText(q);
     
-    let isCorrect = false;
-    if (selectedAns === correctAnsText) {
+    const isCorrect = selectedAns.trim().toLowerCase() === correctAnsText.trim().toLowerCase();
+    if (isCorrect) {
       setScore(s => s + 1);
-      isCorrect = true;
     }
 
     const updatedAnswers = [...userAnswers, selectedAns];
@@ -231,7 +254,7 @@ function StudyHubContent() {
         total: activeTest.questions.length,
         date: new Date().toLocaleDateString(),
         questions: activeTest.questions, 
-        userAnswers: updatedAnswers       
+        userAnswers: updatedAnswers 
       };
       
       const updatedHistory = [newHistoryItem, ...testHistory];
@@ -330,7 +353,7 @@ function StudyHubContent() {
 
     const systemMessage: ChatMessage = { 
       role: 'system', 
-      content: 'You are an AI Tutor explaining a diagnostic test question. Keep explanations extremely clear and concise. CRITICAL INSTRUCTION: You MUST format all mathematical equations and formulas using strictly $ for inline math and $$ for display math.' 
+      content: 'You are an AI Tutor explaining a diagnostic test question. Keep explanations extremely clear and concise. Format all mathematical equations using strictly $ for inline math and $$ for display math.' 
     };
     
     const userMessage: ChatMessage = { 
@@ -375,7 +398,6 @@ function StudyHubContent() {
 
   if (loading) return <div className="flex h-96 items-center justify-center font-black text-xl text-black">LOADING STUDY HUB...</div>;
 
-  // 🌟 ANIMATION VARIANTS
   const containerVariants: Variants = {
     hidden: { opacity: 0 },
     show: { opacity: 1, transition: { staggerChildren: 0.1 } }
@@ -678,7 +700,7 @@ function StudyHubContent() {
                     {activeTest.questions.map((q: any, index: number) => {
                        const uAns = userAnswers[index];
                        const correctAnsText = getCorrectAnswerText(q);
-                       const isCorrect = uAns === correctAnsText;
+                       const isCorrect = uAns && correctAnsText && uAns.trim().toLowerCase() === correctAnsText.trim().toLowerCase();
                        const chatState = explanations[index];
 
                        return (
@@ -710,12 +732,14 @@ function StudyHubContent() {
                                 <div className="space-y-4 max-h-64 overflow-y-auto pr-2">
                                   {chatState.messages.filter(m => m.role !== 'system' && m.role !== 'user' && m.content.trim() !== '').map((msg, i) => (
                                       <div key={i} className="font-medium text-sm leading-relaxed text-black prose prose-black max-w-none prose-p:leading-snug prose-headings:font-black prose-a:text-blue-600 prose-ul:list-disc prose-ol:list-decimal pl-2 sm:pl-4">
-                                        <ReactMarkdown 
-                                          remarkPlugins={[remarkGfm, remarkMath]} 
-                                          rehypePlugins={[rehypeKatex]}
-                                        >
-                                          {formatMath(msg.content)}
-                                        </ReactMarkdown>
+                                        <div className="overflow-x-auto max-w-full my-1">
+                                          <ReactMarkdown 
+                                            remarkPlugins={[remarkGfm, remarkMath]} 
+                                            rehypePlugins={[rehypeKatex]}
+                                          >
+                                            {formatMath(msg.content)}
+                                          </ReactMarkdown>
+                                        </div>
                                       </div>
                                   ))}
 
@@ -741,7 +765,7 @@ function StudyHubContent() {
                                     value={chatState.inputValue}
                                     onChange={(e) => updateExplInput(index, e.target.value)}
                                     placeholder="Ask a follow-up question..." 
-                                    className="flex-1 bg-white border-2 border-black rounded-xl px-3 py-2 font-bold text-sm outline-none text-black"
+                                    className="flex-1 bg-white border-2 border-black rounded-xl px-3 py-2 font-bold text-sm outline-none text-black" 
                                   />
                                   <motion.button 
                                     whileHover={{ scale: 1.05 }}
