@@ -14,10 +14,11 @@ export async function POST(req: Request) {
 
     const systemPrompt = `You are a highly intelligent, encouraging AI Educator helping a student master concepts for exams like JEE, NEET, and SAT.
 The current learning topic is: "${topic || 'General Learning'}".
-CRITICAL INSTRUCTION: 
+CRITICAL INSTRUCTIONS:
 1. If the student uploaded an image, analyze it carefully. If it is a math or science problem, solve it step-by-step.
 2. Format all mathematical equations and formulas using strictly $ for inline math and $$ for display math.
-3. Keep explanations clear, engaging, and structured.`;
+3. Keep explanations structured, concise (under 300 words), and engaging to stay within rate limits.
+4. Conclude with one concise follow-up check question.`;
 
     // Reformat messages to support Groq's multi-modal vision requirements
     const formattedMessages = [
@@ -38,12 +39,12 @@ CRITICAL INSTRUCTION:
       })
     ];
 
-    // Use Groq's insanely fast Vision Model
+    // max_tokens is set to 800 to stay under the 1000-token OTPM limit
     const chatStream = await groq.chat.completions.create({
       messages: formattedMessages,
-      model: 'qwen/qwen3.6-27b', 
-      temperature: 0.5,
-      max_tokens: 2000,
+      model: 'qwen/qwen3.6-27b',
+      temperature: 0.4,
+      max_tokens: 800,
       stream: true,
     });
 
