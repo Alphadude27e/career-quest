@@ -7,42 +7,75 @@ const groq = new Groq({
 
 export async function POST(req: Request) {
   try {
-    const { examName } = await req.json();
+    const { topic } = await req.json();
 
-    const prompt = `You are an expert academic advisor. Provide standard schedule and bulletin details for the entrance exam or test: "${examName}".
-You MUST return ONLY a valid JSON object matching this exact structure, with no extra markdown blocks or text outside the JSON:
+    const prompt = `You are an expert academic examiner. Create a 5-question multiple choice quiz on the topic: "${topic}".
+
+CRITICAL RULE FOR ANSWER INDEX:
+- "correctAnswerIndex" MUST be an integer: 0 for option 1, 1 for option 2, 2 for option 3, or 3 for option 4.
+- Double-check that "options[correctAnswerIndex]" is the scientifically accurate answer.
+
+Return ONLY a valid JSON object matching this schema with no extra markdown ticks or surrounding text:
 {
-  "title": "Exact standard name of the exam",
-  "stream": "Relevant stream (e.g. Science (PCM), Arts, Commerce, Global)",
-  "examDate": "Expected or standard exam timeframe/date",
-  "applicationDeadline": "Expected registration deadline window",
-  "eligibility": "Standard eligibility criteria for students",
-  "officialWebsite": "https://official-website-url.org"
+  "questions": [
+    {
+      "question": "Question text here?",
+      "options": [
+        "First option",
+        "Second option",
+        "Third option",
+        "Fourth option"
+      ],
+      "correctAnswerIndex": 0,
+      "explanation": "Clear explanation of why this answer is correct."
+    }
+  ]
 }`;
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
       model: 'openai/gpt-oss-120b',
-      temperature: 0.1, // <-- Extremely low temperature prevents conversational text
-      max_tokens: 1000,
+      temperature: 0.1,
+      max_tokens: 1500,
     });
 
     const rawContent = chatCompletion.choices[0]?.message?.content || '{}';
-    
-    // Aggressive JSON cleaner to strip out any stubborn Markdown ticks the AI adds
+
     const cleanJSON = rawContent
       .replace(/```json/gi, '')
       .replace(/```/gi, '')
       .trim();
-      
-    const examDetails = JSON.parse(cleanJSON);
 
-    return NextResponse.json({ exam: examDetails });
+    const parsedData = JSON.parse(cleanJSON);
+
+    // Sanitize question indices to prevent 1-based or string letter index bugs
+    const sanitizedQuestions = (parsedData.questions || []).map((q: any) => {
+      let idx = q.correctAnswerIndex;
+
+      // Handle letter responses ("A", "B", "C", "D")
+      if (typeof idx === 'string') {
+        const letterMap: Record<string, number> = { A: 0, B: 1, C: 2, D: 3, a: 0, b: 1, c: 2, d: 3 };
+        idx = letterMap[idx.trim()] ?? 0;
+      }
+
+      // Handle 1-based indexing offsets (1 -> 0, 2 -> 1, etc.)
+      if (typeof idx === 'number' && idx >= 1 && idx <= 4 && !q.options[idx] && q.options[idx - 1]) {
+        idx = idx - 1;
+      }
+
+      return {
+        question: q.question,
+        options: q.options,
+        correctAnswerIndex: Number(idx) || 0,
+        explanation: q.explanation || '',
+      };
+    });
+
+    return NextResponse.json({ questions: sanitizedQuestions });
   } catch (error: any) {
-    // This logs the actual crash reason to your VS Code terminal
-    console.error('Exam generation error:', error); 
+    console.error('Test generation error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch exam details' }, 
+      { error: error.message || 'Failed to generate test' },
       { status: 500 }
     );
   }

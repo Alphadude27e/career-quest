@@ -360,7 +360,7 @@ Keep your answers highly concise, structured, and helpful.`
 
             return (
               <motion.div 
-                layout // <--- This creates the smooth resizing/shuffling magic!
+                layout
                 key={exam.id} 
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -453,9 +453,9 @@ Keep your answers highly concise, structured, and helpful.`
                 <AnimatePresence>
                   {chatState?.isOpen && (
                     <motion.div 
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
+                      initial={{ height: 0, opacity: 0 }} 
+                      animate={{ height: 'auto', opacity: 1 }} 
+                      exit={{ height: 0, opacity: 0 }} 
                       transition={{ duration: 0.3, ease: "easeInOut" }}
                       className="overflow-hidden"
                     >
@@ -475,13 +475,15 @@ Keep your answers highly concise, structured, and helpful.`
                                 className={`p-3 rounded-xl border-2 border-black text-sm ${
                                   msg.role === 'user' 
                                     ? 'bg-[#BFDBFE] ml-auto w-11/12 font-bold' 
-                                    : 'bg-[#FAF8F5] mr-auto w-11/12 font-medium prose prose-sm prose-black leading-snug'
+                                    : 'bg-[#FAF8F5] mr-auto w-11/12 font-medium prose prose-sm prose-black leading-snug break-words'
                                 }`}
                               >
                                 {msg.role === 'user' ? (
                                   msg.content
                                 ) : (
-                                  <ReactMarkdown remarkPlugins={[remarkGfm] as any}>{msg.content}</ReactMarkdown>
+                                  <div className="overflow-x-auto max-w-full my-1">
+                                    <ReactMarkdown remarkPlugins={[remarkGfm] as any}>{msg.content}</ReactMarkdown>
+                                  </div>
                                 )}
                               </motion.div>
                             ))
