@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { auth, db } from '@/lib/firebase';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
-import { Layers, CheckCircle2, Sparkles, Play, X, RefreshCw } from 'lucide-react';
+import { Layers, CheckCircle2, Sparkles, Play, X, RefreshCw, ChevronDown, ChevronRight, Percent } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 // Imports for beautiful AI text and math formatting
@@ -16,28 +16,34 @@ import 'katex/dist/katex.min.css';
 // 🌟 IMPORT FRAMER MOTION
 import { motion, AnimatePresence, Variants } from 'framer-motion';
 
-interface SyllabusTopic {
-  id: string;
-  subject: string;
-  chapter: string;
-  topic: string;
-  category: 'Overlapping' | 'Individual';
-  exams: string[];
-  difficultyComparison: { [examName: string]: 'Easy' | 'Medium' | 'Hard' | 'Advanced' };
+// --- NEW DEEP NESTED INTERFACES ---
+interface SubTopic {
+  name: string;
   completed: boolean;
+}
+
+interface Chapter {
+  chapterName: string;
+  subTopics: SubTopic[];
+}
+
+interface SubjectGroup {
+  subject: string;
+  chapters: Chapter[];
 }
 
 export default function SyllabusTrackerPage() {
   const router = useRouter();
   const [userExams, setUserExams] = useState<string[]>([]);
-  const [topics, setTopics] = useState<SyllabusTopic[]>([]);
+  const [syllabus, setSyllabus] = useState<SubjectGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
 
   const [subjectFilter, setSubjectFilter] = useState<string>('All');
-  const [categoryFilter, setCategoryFilter] = useState<'All' | 'Overlapping' | 'Individual'>('All');
+  const [expandedChapters, setExpandedChapters] = useState<Record<string, boolean>>({});
 
-  const [activeMasterTopic, setActiveMasterTopic] = useState<SyllabusTopic | null>(null);
+  // AI Guided Master State (Now operates at the Chapter level)
+  const [activeMasterChapter, setActiveMasterChapter] = useState<{ subject: string; chapter: string } | null>(null);
   const [guidedMessages, setGuidedMessages] = useState<{ role: 'user' | 'assistant' | 'system'; content: string }[]>([]);
   const [guidedInput, setGuidedInput] = useState('');
   const [guidedLoading, setGuidedLoading] = useState(false);
@@ -58,7 +64,7 @@ export default function SyllabusTrackerPage() {
     const unsubTracker = onSnapshot(doc(db, 'student_syllabus_tracker', user.uid), (trackerSnap) => {
       if (trackerSnap.exists()) {
         const data = trackerSnap.data();
-        setTopics(data.topics || []);
+        setSyllabus(data.syllabus || []);
       }
       setLoading(false);
     });
@@ -79,21 +85,39 @@ export default function SyllabusTrackerPage() {
       const res = await fetch('/api/generate-syllabus', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ exams: userExams })
+        // Passing the combined string of exams to match your new detailed API route
+        body: JSON.stringify({ targetExams: userExams.join(', ') })
       });
       
       const data = await res.json();
       
       if (!res.ok) throw new Error(data.error || 'Failed to communicate with AI API.');
       
-      if (data.topics && data.topics.length > 0) {
-        const formattedTopics = data.topics.map((t: any) => ({ 
-          ...t, 
-          completed: false,
-          id: t.id || Date.now().toString() + Math.random().toString(36).substring(7)
+      if (data.syllabus && data.syllabus.length > 0) {
+        // Map over the new nested structure to ensure 'completed' is set to false initially
+        const formattedSyllabus: SubjectGroup[] = data.syllabus.map((subj: any) => ({
+          subject: subj.subject,
+          chapters: (subj.chapters || []).map((ch: any) => ({
+            chapterName: ch.chapterName,
+            subTopics: (ch.subTopics || []).map((st: any) => ({
+              name: typeof st === 'string' ? st : st.name,
+              completed: false,
+            })),
+          })),
         }));
-        setTopics(formattedTopics);
-        await setDoc(doc(db, 'student_syllabus_tracker', user.uid), { topics: formattedTopics }, { merge: true });
+
+        setSyllabus(formattedSyllabus);
+        await setDoc(doc(db, 'student_syllabus_tracker', user.uid), { syllabus: formattedSyllabus }, { merge: true });
+        
+        // Expand all chapters by default on new generation
+        const newExpandedState: Record<string, boolean> = {};
+        formattedSyllabus.forEach((s, sIdx) => {
+          s.chapters.forEach((_, cIdx) => {
+            newExpandedState[`${sIdx}-${cIdx}`] = true;
+          });
+        });
+        setExpandedChapters(newExpandedState);
+
       } else {
         alert("The AI generated an empty response. Please try again.");
       }
@@ -105,11 +129,21 @@ export default function SyllabusTrackerPage() {
     }
   };
 
-  const toggleTopic = async (id: string) => {
-    const updated = topics.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
-    setTopics(updated);
+  const toggleSubTopic = async (subjIndex: number, chIndex: number, stIndex: number) => {
+    const updated = [...syllabus];
+    const target = updated[subjIndex].chapters[chIndex].subTopics[stIndex];
+    target.completed = !target.completed;
+
+    setSyllabus(updated);
     const user = auth.currentUser;
-    if (user) await setDoc(doc(db, 'student_syllabus_tracker', user.uid), { topics: updated }, { merge: true });
+    if (user) await setDoc(doc(db, 'student_syllabus_tracker', user.uid), { syllabus: updated }, { merge: true });
+  };
+
+  const toggleChapterAccordion = (key: string) => {
+    setExpandedChapters(prev => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
   };
 
   const formatMath = (text: string) => {
@@ -117,11 +151,12 @@ export default function SyllabusTrackerPage() {
     return text.replace(/\\\(/g, '$').replace(/\\\)/g, '$').replace(/\\\[/g, () => '$$').replace(/\\\]/g, () => '$$');
   };
 
-  const handleOpenMasterModal = async (topic: SyllabusTopic) => {
-    setActiveMasterTopic(topic);
+  // Update Master Modal to work on a Chapter level
+  const handleOpenMasterModal = async (subject: string, chapter: string) => {
+    setActiveMasterChapter({ subject, chapter });
     setGuidedLoading(true);
     
-    const initialUserMessage = `Provide a detailed, step-by-step foundational explanation of this topic, breaking down key formulas, concepts, and common pitfalls tested in ${topic.exams.join(', ')}. Conclude with a guided follow-up question.`;
+    const initialUserMessage = `Provide a detailed, step-by-step foundational explanation of the chapter "${chapter}" in "${subject}", breaking down key formulas, concepts, and common pitfalls tested in ${userExams.join(', ')}. Conclude with a guided follow-up question.`;
     
     const newChatHistory = [{ role: 'user' as const, content: initialUserMessage }];
     setGuidedMessages([...newChatHistory, { role: 'assistant', content: '' }]);
@@ -131,7 +166,7 @@ export default function SyllabusTrackerPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          topic: `${topic.topic} (${topic.chapter} - ${topic.subject})`,
+          topic: `${chapter} (${subject})`,
           messages: newChatHistory
         })
       });
@@ -168,7 +203,7 @@ export default function SyllabusTrackerPage() {
   };
 
   const handleSendGuidedChat = async () => {
-    if (!guidedInput.trim() || !activeMasterTopic || guidedLoading) return;
+    if (!guidedInput.trim() || !activeMasterChapter || guidedLoading) return;
 
     const userMsg = guidedInput.trim();
     setGuidedInput('');
@@ -182,7 +217,7 @@ export default function SyllabusTrackerPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          topic: activeMasterTopic.topic,
+          topic: `${activeMasterChapter.chapter} (${activeMasterChapter.subject})`,
           messages: updatedChat
         })
       });
@@ -223,15 +258,13 @@ export default function SyllabusTrackerPage() {
     );
   }
 
-  const subjects = ['All', ...Array.from(new Set(topics.map(t => t.subject)))].filter(Boolean);
-  const filteredTopics = topics.filter(t => {
-    if (subjectFilter !== 'All' && t.subject !== subjectFilter) return false;
-    if (categoryFilter !== 'All' && t.category !== categoryFilter) return false;
-    return true;
-  });
+  // Progress Calculations
+  const allSubTopics = syllabus.flatMap(s => s.chapters.flatMap(c => c.subTopics));
+  const totalSubTopics = allSubTopics.length;
+  const completedSubTopics = allSubTopics.filter(st => st.completed).length;
+  const progressPercent = totalSubTopics > 0 ? Math.round((completedSubTopics / totalSubTopics) * 100) : 0;
 
-  const completedCount = topics.filter(t => t.completed).length;
-  const progressPercent = topics.length > 0 ? Math.round((completedCount / topics.length) * 100) : 0;
+  const subjects = ['All', ...Array.from(new Set(syllabus.map(s => s.subject)))].filter(Boolean);
 
   // 🌟 ANIMATION VARIANTS
   const containerVariants: Variants = {
@@ -246,7 +279,7 @@ export default function SyllabusTrackerPage() {
 
   return (
     <motion.div 
-      className="max-w-6xl mx-auto space-y-8 pb-12"
+      className="max-w-6xl mx-auto space-y-8 pb-12 text-black"
       variants={containerVariants}
       initial="hidden"
       animate="show"
@@ -261,26 +294,31 @@ export default function SyllabusTrackerPage() {
             {userExams.length > 0 ? `Mapped for: ${userExams.join(', ')}` : 'Add exams in the bulletin to get started.'}
           </p>
         </div>
-        <div className="bg-white border-4 border-black p-5 rounded-2xl text-center shrink-0">
-          <div className="text-xs font-black uppercase text-gray-500">Mastery Progress</div>
-          <div className="text-3xl font-black mt-1">{progressPercent}%</div>
-        </div>
+        {totalSubTopics > 0 && (
+          <div className="bg-white border-4 border-black p-5 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center gap-4 shrink-0">
+            <Percent className="w-10 h-10 text-black fill-[#A7F3D0]" />
+            <div>
+              <div className="text-xs font-black uppercase text-gray-500">Mastery Progress</div>
+              <div className="text-3xl font-black">{progressPercent}%</div>
+            </div>
+          </div>
+        )}
       </motion.div>
 
-      {topics.length === 0 ? (
+      {syllabus.length === 0 ? (
         <motion.div variants={itemVariants} className="bg-white border-4 border-black p-12 rounded-3xl text-center space-y-4">
           <Layers className="w-16 h-16 mx-auto text-gray-400" />
           <h2 className="text-2xl font-black">Your Syllabus is Empty</h2>
-          <p className="font-bold text-gray-600">Let AI map out the overlapping and individual chapters based on your active exams.</p>
+          <p className="font-bold text-gray-600">Let AI map out an ultra-detailed, chapter-by-chapter plan based on your active exams.</p>
           <motion.button 
             whileHover={{ scale: 1.05, translateY: -2 }}
             whileTap={{ scale: 0.95 }}
             onClick={generateDynamicSyllabus}
-            disabled={generating}
-            className="bg-[#FF8A65] border-2 border-black px-8 py-3 rounded-xl font-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-shadow disabled:opacity-50 cursor-pointer inline-flex items-center gap-2"
+            disabled={generating || userExams.length === 0}
+            className="bg-[#FF8A65] border-2 border-black px-8 py-3 rounded-xl font-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-shadow disabled:opacity-50 cursor-pointer inline-flex items-center gap-2 text-black"
           >
             {generating ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
-            {generating ? 'Mapping Syllabus...' : 'Generate AI Syllabus Map'}
+            {generating ? 'Mapping Deep Syllabus...' : 'Generate Deep Syllabus Map'}
           </motion.button>
         </motion.div>
       ) : (
@@ -301,97 +339,142 @@ export default function SyllabusTrackerPage() {
               ))}
             </div>
             
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex items-center gap-2">
-                <span className="font-black text-xs uppercase px-2">Type:</span>
-                {(['All', 'Overlapping', 'Individual'] as const).map((c, idx) => (
-                  <motion.button 
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    key={`type-${idx}`} 
-                    onClick={() => setCategoryFilter(c)} 
-                    className={`px-3 py-1.5 rounded-xl border-2 border-black font-black text-xs cursor-pointer ${categoryFilter === c ? 'bg-[#A7F3D0]' : 'bg-[#FAF8F5]'}`}
-                  >
-                    {c}
-                  </motion.button>
-                ))}
-              </div>
-
-              <motion.button 
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={generateDynamicSyllabus}
-                disabled={generating}
-                className="bg-[#BFDBFE] border-2 border-black px-4 py-1.5 rounded-xl font-black text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all disabled:opacity-50 cursor-pointer flex items-center gap-2"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${generating ? 'animate-spin' : ''}`} />
-                {generating ? 'Mapping...' : 'Sync AI Syllabus'}
-              </motion.button>
-            </div>
+            <motion.button 
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={generateDynamicSyllabus}
+              disabled={generating}
+              className="bg-[#BFDBFE] border-2 border-black px-4 py-1.5 rounded-xl font-black text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all disabled:opacity-50 cursor-pointer flex items-center gap-2 text-black shrink-0"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${generating ? 'animate-spin' : ''}`} />
+              {generating ? 'Mapping...' : 'Re-Sync AI Syllabus'}
+            </motion.button>
           </motion.div>
 
-          <motion.div variants={itemVariants} className="grid grid-cols-1 gap-6">
+          <motion.div variants={itemVariants} className="space-y-6">
             <AnimatePresence mode="popLayout">
-              {filteredTopics.map((topic) => (
-                <motion.div 
-                  layout
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ type: "spring", stiffness: 200, damping: 20 }}
-                  key={topic.id} 
-                  className={`p-6 rounded-3xl border-4 border-black transition-colors ${topic.completed ? 'bg-gray-100 opacity-75' : 'bg-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'}`}
-                >
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b-2 border-black pb-4">
-                    <div className="flex items-start gap-4">
-                      {/* 🌟 ANIMATED CHECKBOX */}
-                      <motion.button 
-                        whileHover={{ scale: 1.2 }}
-                        whileTap={{ scale: 0.8 }}
-                        onClick={() => toggleTopic(topic.id)} 
-                        className="mt-1 cursor-pointer outline-none"
-                      >
-                        <CheckCircle2 className={`w-7 h-7 transition-colors ${topic.completed ? 'text-black fill-emerald-400' : 'text-gray-300'}`} />
-                      </motion.button>
-                      
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                          <span className="bg-[#FAF8F5] text-xs font-black px-2 py-0.5 border border-black rounded">
-                            {topic.subject || 'Subject'} &gt; {topic.chapter || 'Chapter'}
+              {syllabus
+                .filter(s => subjectFilter === 'All' || s.subject === subjectFilter)
+                .map((subj, subjIdx) => {
+                  const subjSubtopics = subj.chapters.flatMap(c => c.subTopics);
+                  const completedCount = subjSubtopics.filter(st => st.completed).length;
+                  const subjPct = subjSubtopics.length > 0 ? Math.round((completedCount / subjSubtopics.length) * 100) : 0;
+
+                  return (
+                    <motion.div 
+                      layout
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      transition={{ type: "spring", stiffness: 200, damping: 20 }}
+                      key={subjIdx} 
+                      className="bg-white border-4 border-black p-6 rounded-3xl shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] space-y-4"
+                    >
+                      {/* Subject Header */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b-4 border-black pb-4 gap-2">
+                        <div>
+                          <span className="text-xs font-black uppercase bg-[#FAF8F5] border-2 border-black px-2.5 py-1 rounded-md">
+                            Subject
                           </span>
-                          <span className={`text-xs font-black px-2.5 py-0.5 border-2 border-black rounded-md ${topic.category === 'Overlapping' ? 'bg-[#BFDBFE]' : 'bg-[#FF8A65]'}`}>
-                            {topic.category || 'Topic'}
+                          <h3 className="text-2xl font-black mt-2">{subj.subject}</h3>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-bold text-gray-600">
+                            {completedCount} of {subjSubtopics.length} completed
+                          </span>
+                          <span className="bg-[#A7F3D0] border-2 border-black font-black text-xs px-3 py-1 rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                            {subjPct}%
                           </span>
                         </div>
-                        <h3 className={`text-xl font-black ${topic.completed ? 'line-through text-gray-500' : 'text-black'}`}>
-                          {topic.topic || 'Untitled Topic'}
-                        </h3>
                       </div>
-                    </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => handleOpenMasterModal(topic)} className="bg-[#BFDBFE] border-2 border-black px-4 py-2 rounded-xl font-black text-xs cursor-pointer flex items-center gap-1.5"><Sparkles className="w-4 h-4 fill-black" /> Master</motion.button>
-                      <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => router.push(`/study?topic=${encodeURIComponent(topic.topic || '')}`)} className="bg-[#A7F3D0] border-2 border-black px-4 py-2 rounded-xl font-black text-xs cursor-pointer flex items-center gap-1.5"><Play className="w-3.5 h-3.5 fill-black" /> Test</motion.button>
-                    </div>
-                  </div>
+                      {/* Chapters Grid */}
+                      <div className="grid grid-cols-1 gap-4">
+                        {subj.chapters.map((ch, chIdx) => {
+                          const chapterKey = `${subjIdx}-${chIdx}`;
+                          const isExpanded = expandedChapters[chapterKey] ?? true;
+                          const chCompleted = ch.subTopics.filter(s => s.completed).length;
+                          const chTotal = ch.subTopics.length;
+                          const allChCompleted = chTotal > 0 && chCompleted === chTotal;
 
-                  <div className="mt-4 pt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                    <div className="text-xs font-black uppercase text-gray-500 col-span-full">
-                      Exam Difficulty Breakdown:
-                    </div>
-                    {topic.difficultyComparison && Object.entries(topic.difficultyComparison).map(([examName, diff], i) => (
-                      <div key={i} className="bg-[#FAF8F5] border-2 border-black p-2.5 rounded-xl flex items-center justify-between">
-                        <span className="font-black text-xs truncate max-w-[100px]">{examName}</span>
-                        <span className={`text-[10px] font-black px-2 py-0.5 rounded border border-black shrink-0 ${
-                          diff === 'Advanced' ? 'bg-red-300' : diff === 'Hard' ? 'bg-amber-300' : 'bg-emerald-200'
-                        }`}>
-                          {diff}
-                        </span>
+                          return (
+                            <div 
+                              key={chIdx} 
+                              className={`border-4 border-black rounded-2xl overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-colors ${
+                                allChCompleted ? 'bg-gray-100 opacity-80' : 'bg-[#FAF8F5]'
+                              }`}
+                            >
+                              <div className="p-4 bg-white border-b-4 border-black flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div 
+                                  onClick={() => toggleChapterAccordion(chapterKey)}
+                                  className="flex items-center gap-3 font-black text-lg cursor-pointer flex-1"
+                                >
+                                  {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+                                  <span className={allChCompleted ? 'line-through text-gray-500' : 'text-black'}>
+                                    {ch.chapterName}
+                                  </span>
+                                  <span className="text-xs font-bold bg-[#BFDBFE] border-2 border-black px-2.5 py-0.5 rounded-md ml-2">
+                                    {chCompleted} / {chTotal}
+                                  </span>
+                                </div>
+                                
+                                <div className="flex items-center gap-2 shrink-0 ml-8 md:ml-0">
+                                  <motion.button 
+                                    whileHover={{ scale: 1.05 }} 
+                                    whileTap={{ scale: 0.95 }} 
+                                    onClick={() => handleOpenMasterModal(subj.subject, ch.chapterName)} 
+                                    className="bg-[#BFDBFE] border-2 border-black px-4 py-2 rounded-xl font-black text-xs cursor-pointer flex items-center gap-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-black"
+                                  >
+                                    <Sparkles className="w-4 h-4 fill-black" /> Master
+                                  </motion.button>
+                                  <motion.button 
+                                    whileHover={{ scale: 1.05 }} 
+                                    whileTap={{ scale: 0.95 }} 
+                                    onClick={() => router.push(`/study?topic=${encodeURIComponent(ch.chapterName)}`)} 
+                                    className="bg-[#A7F3D0] border-2 border-black px-4 py-2 rounded-xl font-black text-xs cursor-pointer flex items-center gap-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-black"
+                                  >
+                                    <Play className="w-3.5 h-3.5 fill-black" /> Test
+                                  </motion.button>
+                                </div>
+                              </div>
+
+                              <AnimatePresence>
+                                {isExpanded && (
+                                  <motion.div 
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 bg-[#FAF8F5]"
+                                  >
+                                    {ch.subTopics.map((st, stIdx) => (
+                                      <label
+                                        key={stIdx}
+                                        onClick={() => toggleSubTopic(subjIdx, chIdx, stIdx)}
+                                        className={`flex items-start gap-3 p-3 rounded-xl border-2 border-black font-bold text-sm cursor-pointer transition-all ${
+                                          st.completed 
+                                            ? 'bg-[#A7F3D0] line-through text-gray-700 shadow-none translate-x-[1px] translate-y-[1px]' 
+                                            : 'bg-white hover:bg-gray-50 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                                        }`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={st.completed}
+                                          onChange={() => {}} 
+                                          className="w-4 h-4 mt-0.5 rounded border-2 border-black accent-black cursor-pointer shrink-0"
+                                        />
+                                        <span className="flex-1 leading-snug">{st.name}</span>
+                                      </label>
+                                    ))}
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          );
+                        })}
                       </div>
-                    ))}
-                  </div>
-                </motion.div>
-              ))}
+                    </motion.div>
+                  );
+              })}
             </AnimatePresence>
           </motion.div>
         </>
@@ -399,7 +482,7 @@ export default function SyllabusTrackerPage() {
 
       {/* 🌟 ANIMATED AI Guided Modal */}
       <AnimatePresence>
-        {activeMasterTopic && (
+        {activeMasterChapter && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -415,13 +498,15 @@ export default function SyllabusTrackerPage() {
             >
               <div className="bg-[#FF8A65] border-b-4 border-black p-6 flex items-center justify-between shrink-0">
                 <div>
-                  <span className="text-[10px] font-black uppercase tracking-wider bg-white border border-black px-2 py-0.5 rounded">AI Guided Educator</span>
-                  <h2 className="text-xl font-black mt-1 text-black">{activeMasterTopic.topic}</h2>
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-white border border-black px-2 py-0.5 rounded text-black">
+                    AI Guided Educator • {activeMasterChapter.subject}
+                  </span>
+                  <h2 className="text-xl font-black mt-1 text-black">{activeMasterChapter.chapter}</h2>
                 </div>
                 <motion.button 
                   whileHover={{ scale: 1.1, rotate: 90 }}
                   whileTap={{ scale: 0.9 }}
-                  onClick={() => setActiveMasterTopic(null)} 
+                  onClick={() => setActiveMasterChapter(null)} 
                   className="p-2 bg-white border-2 border-black rounded-xl cursor-pointer hover:bg-red-300 transition-colors shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                 >
                   <X className="w-5 h-5 text-black" />
@@ -443,7 +528,7 @@ export default function SyllabusTrackerPage() {
                       {msg.role === 'user' ? (
                         <p className="whitespace-pre-line leading-relaxed text-gray-900">{msg.content}</p>
                       ) : (
-                        <div className="font-medium leading-relaxed text-black prose prose-sm prose-black max-w-none prose-p:leading-snug prose-headings:font-black prose-a:text-blue-600 prose-ul:list-disc prose-ol:list-decimal">
+                        <div className="font-medium leading-relaxed text-black prose prose-sm prose-black max-w-none prose-p:leading-snug prose-headings:font-black prose-a:text-blue-600 prose-ul:list-disc prose-ol:list-decimal overflow-x-auto">
                           <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath] as any} rehypePlugins={[rehypeKatex] as any}>
                             {formatMath(msg.content)}
                           </ReactMarkdown>
@@ -469,15 +554,15 @@ export default function SyllabusTrackerPage() {
                   value={guidedInput} 
                   onChange={(e) => setGuidedInput(e.target.value)} 
                   onKeyDown={(e) => e.key === 'Enter' && handleSendGuidedChat()} 
-                  placeholder="Ask a follow-up about this topic..." 
-                  className="flex-1 bg-[#FAF8F5] border-2 border-black rounded-xl px-4 py-3 font-bold text-xs outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" 
+                  placeholder="Ask a follow-up about this chapter..." 
+                  className="flex-1 bg-[#FAF8F5] border-2 border-black rounded-xl px-4 py-3 font-bold text-xs outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-black" 
                 />
                 <motion.button 
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={handleSendGuidedChat} 
                   disabled={guidedLoading || !guidedInput.trim()} 
-                  className="bg-[#BFDBFE] border-2 border-black px-6 py-3 rounded-xl font-black text-xs cursor-pointer disabled:opacity-50 transition-shadow shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                  className="bg-[#BFDBFE] border-2 border-black px-6 py-3 rounded-xl font-black text-xs cursor-pointer disabled:opacity-50 transition-shadow shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-black"
                 >
                   Send
                 </motion.button>
