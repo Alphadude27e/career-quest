@@ -6,7 +6,8 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import Link from 'next/link';
-import { LayoutDashboard, Compass, BookOpen, GraduationCap, ClipboardList, Briefcase, Settings, LogOut, Menu, X, Sparkles, User } from 'lucide-react';
+// 🌟 ADDED Zap (Flashcards) and FileSearch (Analyzer) to imports
+import { LayoutDashboard, Compass, BookOpen, GraduationCap, ClipboardList, Briefcase, Settings, LogOut, Menu, X, Sparkles, User, Zap, FileSearch } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -27,15 +28,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
 
       try {
-        // 1. Check if the user has a profile document in Firestore
         const userDoc = await getDoc(doc(db, 'student_profiles', user.uid));
         
         if (userDoc.exists() && isSubscribed) {
-          // Profile exists! Load their data for the sidebar
           const data = userDoc.data();
           if (data.name) setUserName(data.name);
         } else if (isSubscribed) {
-          // 🚨 NO PROFILE FOUND! Force redirect to the setup page
           router.push('/onboarding'); 
         }
       } catch (err) {
@@ -58,6 +56,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   };
 
+  // 🌟 ADDED Flashcards and Analyzer to navigation
   const navItems = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard, color: 'bg-[#BFDBFE]', iconBg: 'bg-[#FACC15]' },
     { name: 'AI Counsellor', href: '/counsellor', icon: Compass, color: 'bg-[#FF8A65]', iconBg: 'bg-[#4ADE80]' },
@@ -67,6 +66,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'AI Educator', href: '/educator', icon: Sparkles, color: 'bg-[#A7F3D0]', iconBg: 'bg-[#93C5FD]' },
     { name: 'Syllabus Tracker', href: '/syllabus', icon: BookOpen, color: 'bg-[#FDE68A]', iconBg: 'bg-[#F87171]' },
     { name: 'Colleges & Careers', href: '/opportunities', icon: Briefcase, color: 'bg-[#C7D2FE]', iconBg: 'bg-[#4ADE80]' },
+    { name: 'AI Flashcards', href: '/flashcards', icon: Zap, color: 'bg-[#FDE047]', iconBg: 'bg-[#93C5FD]' },
+    { name: 'Paper Analyzer', href: '/analyzer', icon: FileSearch, color: 'bg-[#FCA5A5]', iconBg: 'bg-[#FDE047]' },
   ];
 
   if (!isMounted) {
@@ -76,7 +77,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex h-screen bg-[#FAF8F5] font-sans text-black overflow-hidden">
       
-      {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div 
           onClick={() => setSidebarOpen(false)}
@@ -84,33 +84,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         />
       )}
 
-      {/* 🌟 WIDER, CHUNKIER SIDEBAR */}
       <aside className={`fixed md:static inset-y-0 left-0 z-50 w-80 bg-white border-r-4 border-black transition-transform duration-300 flex flex-col justify-between overflow-y-auto shrink-0 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       }`}>
         
-        {/* Top Section (Red Block) */}
         <div className="bg-[#F87171] border-b-4 border-black p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-black tracking-tight text-black">Career Quest.</h1>
             </div>
-            <button 
-              onClick={() => setSidebarOpen(false)} 
-              className="md:hidden p-1 bg-white border-2 border-black rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-            >
+            <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 bg-white border-2 border-black rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
               <X className="w-6 h-6" />
             </button>
           </div>
 
-          {/* 🌟 CLICKABLE LINK TO /profile */}
-          <Link 
-            href="/profile"
-            onClick={() => setSidebarOpen(false)}
-            className="block bg-white border-2 border-black p-3.5 rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[2px] hover:translate-x-[2px] transition-all cursor-pointer"
-          >
+          <Link href="/profile" onClick={() => setSidebarOpen(false)} className="block bg-white border-2 border-black p-3.5 rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[2px] hover:translate-x-[2px] transition-all cursor-pointer">
             <div className="flex items-center justify-between gap-3 overflow-hidden">
-              <span className="text-base font-black truncate pt-0.5">✨ {userName}</span>
+              <span className="text-base font-black truncate pt-0.5">👤 {userName}</span>
               <div className="p-2 bg-[#FEF08A] border-2 border-black rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shrink-0">
                 <GraduationCap className="w-5 h-5" />
               </div>
@@ -118,7 +108,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </Link>
         </div>
 
-        {/* Middle Navigation Section */}
         <div className="flex-1 p-6 space-y-3 bg-[#FAF8F5]">
           <nav className="space-y-4">
             {navItems.map((item) => {
@@ -145,49 +134,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </nav>
         </div>
 
-        {/* Bottom Section (Green Footer Block) */}
         <div className="p-6 space-y-4 bg-[#A7F3D0] border-t-4 border-black">
-          <Link
-            href="/settings"
-            className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl font-black text-base border-2 border-black bg-white hover:bg-gray-50 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all"
-          >
-            <div className="p-2 border-2 border-black rounded-xl bg-[#FACC15] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shrink-0">
-              <Settings className="w-5 h-5 text-black shrink-0" />
-            </div>
+          <Link href="/settings" className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl font-black text-base border-2 border-black bg-white hover:bg-gray-50 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all">
+            <div className="p-2 border-2 border-black rounded-xl bg-[#FACC15] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shrink-0"><Settings className="w-5 h-5 text-black shrink-0" /></div>
             <span className="pt-0.5">Settings</span>
           </Link>
           
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-3 bg-[#F87171] text-black font-black py-4 px-4 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer text-base"
-          >
+          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-3 bg-[#F87171] text-black font-black py-4 px-4 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer text-base">
             <LogOut className="w-5 h-5" /> Logout
           </button>
         </div>
 
       </aside>
 
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
-        
-        {/* Mobile Header Bar */}
         <header className="md:hidden flex items-center justify-between p-4 bg-white border-b-4 border-black shrink-0">
-          <button 
-            onClick={() => setSidebarOpen(true)}
-            className="p-2 bg-white border-2 border-black rounded-xl shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer"
-          >
-            <Menu className="w-6 h-6" />
-          </button>
+          <button onClick={() => setSidebarOpen(true)} className="p-2 bg-white border-2 border-black rounded-xl shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer"><Menu className="w-6 h-6" /></button>
           <span className="font-black text-xl">Career Quest.</span>
           <div className="w-10" />
         </header>
-
         <main className="flex-1 overflow-y-auto p-4 sm:p-8 bg-[#FAF8F5]">
           {children}
         </main>
-
       </div>
-
     </div>
   );
 }
